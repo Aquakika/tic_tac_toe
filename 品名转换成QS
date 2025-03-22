@@ -1,0 +1,39 @@
+import random
+import hashlib
+import pandas as pd
+import re
+from pypinyin import lazy_pinyin, Style
+
+# 读取 Excel 文件
+file_path = "/content/66.xlsx"  # 确保文件路径正确
+df = pd.read_excel(file_path)
+
+# 提取汉字的拼音首字母
+def extract_pinyin_code(text):
+    # 只保留汉字（去掉英文、数字、特殊符号）
+    chinese_chars = ''.join(re.findall(r'[\u4e00-\u9fff]', str(text)))
+
+    if not chinese_chars:  # 如果没有汉字，返回空值
+        return ""
+
+    # 获取拼音首字母
+    first_letters = ''.join(lazy_pinyin(chinese_chars, style=Style.FIRST_LETTER))
+
+    # 使用汉字部分的哈希值作为随机种子（保证相同的汉字部分生成相同的随机数）
+    seed = int(hashlib.md5(chinese_chars.encode('utf-8')).hexdigest(), 16)
+    random.seed(seed)
+    random_numbers = ''.join([str(random.randint(0, 9)) for _ in range(3)])
+
+    return f"QS_{first_letters.lower()}_{random_numbers}"
+
+# 处理列名，防止因空格或大小写问题导致的错误
+df.columns = df.columns.str.strip()
+
+# 确保 "品名" 列存在
+if "品名" in df.columns:
+    df["编码"] = df["品名"].apply(extract_pinyin_code)  # 生成编码
+    output_file = "/content/66.xlsx"  # 直接覆盖原文件
+    df.to_excel(output_file, index=False)
+    print(f"编码已生成并保存到 {output_file}！")
+else:
+    print("错误：Excel 文件中未找到 '品名' 列，请检查列名是否正确。")
