@@ -1,0 +1,99 @@
+from fuzzywuzzy import process
+import pandas as pd
+
+# 读取税号库 A 文件
+tax_file = "tax_data_cleaned.xlsx"  # 替换为你的文件路径
+df_tax = pd.read_excel(tax_file)
+
+# 读取 B 文件
+b_file = "1533.xlsx"  # 替换为你的文件路径
+df_b = pd.read_excel(b_file)
+
+# 确保列名去除空格，避免匹配问题
+df_tax.columns = df_tax.columns.str.strip()
+df_b.columns = df_b.columns.str.strip()
+
+# 规范列名，确保一致
+tax_name_col = "品名"
+tax_material_col = "材质"
+tax_code_col = "税号"
+tax_rate_col = "税率"
+
+product_name_col = "品名"
+product_material_col = "材质"
+
+# 需要匹配的品名和材质列表
+tax_product_names = df_tax[tax_name_col].tolist()
+tax_materials = df_tax[tax_material_col].tolist()
+
+# **1. 先进行严格匹配（品名+材质）**
+def strict_match(product_name, product_material):
+    matched_row = df_tax[
+        (df_tax[tax_name_col] == product_name) & (df_tax[tax_material_col] == product_material)
+    ]
+    if not matched_row.empty:
+        return matched_row[tax_name_col].values[0], matched_row[tax_material_col].values[0]
+    return None  # 没有找到严格匹配的项
+
+# **2. 如果严格匹配失败，进行模糊匹配**
+def fuzzy_match(product_name, product_material, threshold=85):
+    # 进行品名模糊匹配
+    best_match_name = process.extractOne(product_name, tax_product_names)
+    
+    if best_match_name and best_match_name[1] >= threshold:  # 确保匹配度高于阈值
+        matched_name = best_match_name[0]
+
+        # 找到模糊匹配的品名后，检查材质是否包含
+        matched_row = df_tax[df_tax[tax_name_col] == matched_name]
+
+        for _, row in matched_row.iterrows():
+            if product_material in row[tax_material_col] or row[tax_material_col] in product_material:
+                return matched_name, row[tax_material_col]
+        
+        # 如果材质无法匹配，则返回品名匹配结果
+        return matched_name, ""
+    
+    return None  # 没找到合适的匹配
+
+# **3. 进行匹配并填充结果**
+matched_names = []
+matched_materials = []
+
+for _, row in df_b.iterrows():
+    product_name = row[product_name_col]
+    product_material = row[product_material_col]
+
+    # 先尝试严格匹配
+    match = strict_match(product_name, product_material)
+
+    if match:
+        matched_names.append(match[0])
+        matched_materials.append(match[1])
+    else:
+        # 如果严格匹配失败，进行模糊匹配
+        match = fuzzy_match(product_name, product_material)
+
+        if match:
+            matched_names.append(match[0])
+            matched_materials.append(match[1])
+        else:
+            matched_names.append("")  # 没有匹配到
+            matched_materials.append("")
+
+# 将匹配结果添加到 df_b
+df_b["匹配品名"] = matched_names
+df_b["匹配材质"] = matched_materials
+
+# **4. 根据匹配的品名，填充税号和税率**
+def get_tax_info(matched_name):
+    if matched_name:
+        matched_row = df_tax[df_tax[tax_name_col] == matched_name]
+        if not matched_row.empty:
+            return matched_row[tax_code_col].values[0], matched_row[tax_rate_col].values[0]
+    return "", ""
+
+df_b[["税号", "税率"]] = df_b["匹配品名"].apply(lambda x: pd.Series(get_tax_info(x)))
+
+# **5. 保存结果**
+df_b.to_excel(b_file, index=False)
+print(f"匹配完成，结果已保存到 {b_file}！")
