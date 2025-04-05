@@ -1,0 +1,53 @@
+import pandas as pd
+import random
+import hashlib
+import re
+from pypinyin import lazy_pinyin
+
+# 提取汉字
+def extract_chinese(text):
+    return re.sub(r'[^\u4e00-\u9fa5]', '', text)
+
+# 生成稳定的三位数字
+def stable_number(name):
+    hash_val = hashlib.md5(name.encode('utf-8')).hexdigest()
+    return 100 + (int(hash_val[:6], 16) % 900)
+
+# 生成型号：拼音首字母（不超4个）+ 稳定数字
+def generate_model(name):
+    chinese_name = extract_chinese(name)
+    initials = [lazy_pinyin(char)[0][0] for char in chinese_name[:4]]
+    short_code = ''.join(initials)
+    number = stable_number(name)
+    return f'QS_{short_code}_{number}'
+
+# 读取文件
+df_qs = pd.read_excel('QS.xlsx')
+df_a = pd.read_excel('A.xlsx')
+
+# 创建品名→型号的字典映射（去重）
+qs_map = df_qs.drop_duplicates(subset='品名').set_index('品名')['型号'].to_dict()
+
+# 用来保存结果
+model_list = []
+match_list = []
+
+# 遍历 A 文件中的品名
+for name in df_a['品名']:
+    if name in qs_map:
+        model_list.append(qs_map[name])
+        match_list.append('是')
+    else:
+        model_list.append(generate_model(name))
+        match_list.append('否')
+
+# 添加列
+df_a['型号'] = model_list
+df_a['是否匹配'] = match_list
+
+# 匹配率（每行都显示）
+match_percent = match_list.count('是') / len(match_list) * 100
+df_a['匹配率'] = f"{match_percent:.2f}%"
+
+# 保存结果
+df_a.to_excel('A.xlsx', index=False)
