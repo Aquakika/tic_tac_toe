@@ -1,0 +1,29 @@
+import pandas as pd
+import re
+
+# 读取两个文件
+jg_df = pd.read_excel('JG.xls')
+df_103 = pd.read_excel('103.xlsx')
+
+# 确保都是字符串
+jg_df['型号'] = jg_df['型号'].astype(str)
+df_103['型号'] = df_103['型号'].astype(str)
+
+# 提取汉字部分
+def extract_chinese(text):
+    return ''.join(re.findall(r'[\u4e00-\u9fff]+', text))
+
+jg_df['型号_汉字'] = jg_df['型号'].apply(extract_chinese)
+
+# 创建一个新列“编码”，并初始化为空
+df_103['编码'] = ''
+
+# 遍历103文件每一行，根据型号的汉字部分精准匹配JG文件
+for i, row in df_103.iterrows():
+    keyword = extract_chinese(row['型号'])
+    match = jg_df[jg_df['型号_汉字'] == keyword]
+    if not match.empty:
+        df_103.at[i, '编码'] = match.iloc[0]['编码']  # 取第一个匹配结果
+
+# 将结果保存回原来的文件（覆盖）
+df_103.to_excel('103.xlsx', index=False)
