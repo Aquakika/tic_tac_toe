@@ -1,5 +1,4 @@
 import pandas as pd
-import random
 import hashlib
 import re
 from pypinyin import lazy_pinyin
@@ -23,9 +22,9 @@ def generate_model(name):
 
 # 读取文件
 df_qs = pd.read_excel('QS.xlsx')
-df_a = pd.read_excel('A.xlsx')
+df_a = pd.read_excel('1766.xlsx')
 
-# 创建品名→型号的字典映射（去重）
+# 只提取汉字，并根据汉字建立品名到型号的映射
 qs_map = df_qs.drop_duplicates(subset='品名').set_index('品名')['型号'].to_dict()
 
 # 用来保存结果
@@ -34,10 +33,20 @@ match_list = []
 
 # 遍历 A 文件中的品名
 for name in df_a['品名']:
-    if name in qs_map:
-        model_list.append(qs_map[name])
-        match_list.append('是')
-    else:
+    # 提取中文字符进行匹配
+    chinese_name = extract_chinese(name)
+    
+    # 检查是否有匹配的品名（仅汉字部分）
+    matched = False
+    for qs_name, model in qs_map.items():
+        if extract_chinese(qs_name) == chinese_name:
+            model_list.append(model)
+            match_list.append('是')
+            matched = True
+            break
+            
+    if not matched:
+        # 如果没有匹配到，生成一个新的型号
         model_list.append(generate_model(name))
         match_list.append('否')
 
@@ -45,9 +54,11 @@ for name in df_a['品名']:
 df_a['型号'] = model_list
 df_a['是否匹配'] = match_list
 
-# 匹配率（每行都显示）
+# 计算匹配率
 match_percent = match_list.count('是') / len(match_list) * 100
-df_a['匹配率'] = f"{match_percent:.2f}%"
 
-# 保存结果
-df_a.to_excel('A.xlsx', index=False)
+# 为每一行添加匹配率列，显示为百分比
+df_a['匹配率'] = match_percent
+
+# 保存结果到原文件176.xlsx
+df_a.to_excel('1766.xlsx', index=False)
