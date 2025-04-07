@@ -1,0 +1,27 @@
+import pandas as pd
+
+# 假设读取数据，包含更多列
+df = pd.read_excel('1税号管理.xlsx')  # 替换为实际文件路径
+
+# 确保HSコード列中的所有值都是字符串类型，并处理NaN
+df['HSコード'] = df['HSコード'].astype(str)
+
+# 统计每个HSコード的出现次数
+hs_code_counts = df['HSコード'].value_counts()
+
+# 根据HSコード进行分类，并将分类理由拆分成两列
+def classify_by_hscode(hs_code):
+    count = hs_code_counts[hs_code]  # 获取该税号的重复次数
+    return f'重复税号 ({count}次)', f'该税号{hs_code}重复了{count}次'
+
+# 根据HSコード进行分类，并将分类理由拆分成两列
+df[['类别', '分类理由']] = df['HSコード'].apply(lambda x: pd.Series(classify_by_hscode(x)))
+
+# 按照HSコード和出现次数进行排序，确保重复的税号排在一起
+df_sorted = df.sort_values(by=['HSコード', '类别'], ascending=[True, False])
+
+# 保存分类后的结果到新的Excel文件
+df_sorted.to_excel('sorted_by_hscode_with_reasons.xlsx', index=False)
+
+# 查看分类后的数据
+print(df_sorted)
